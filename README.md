@@ -13,7 +13,7 @@ Workload API 取对应 audience 的 JWT-SVID，provider 不保存任何凭据。
 ```hcl
 terraform {
   required_providers {
-    homelab = { source = "git.ddupan.top/ddupan/homelab" }
+    homelab = { source = "terraform.lab.ddupan.top/ddupan/homelab" }
   }
 }
 
@@ -43,5 +43,11 @@ go test ./...
 go build -o terraform-provider-homelab
 ```
 
-本地试用可在 `~/.terraformrc` 用 `dev_overrides` 指向构建产物；正式分发方式（filesystem mirror 或 Gitea
-package registry）随首个 release 确定。
+本地试用可在 `~/.terraformrc` 用 `dev_overrides` 指向构建产物。
+
+## 发布
+
+打 `vX.Y.Z` tag 即发布：`release` job 测试后执行 `scripts/release`，构建 linux/amd64、linux/arm64 的 zip，
+用 registry 专用 GPG 密钥签名 `SHA256SUMS`，上传到静态 registry `https://terraform.lab.ddupan.top`
+（homelab-infra `apps/seaweedfs` 的 `terraform-registry` bucket）并更新 versions 索引。凭据经 job 的 SPIFFE 身份
+从 OpenBao（role `ci-terraform-registry-publisher`）取得，不出现在参数或日志中。

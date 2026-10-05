@@ -18,7 +18,7 @@ func main() {
 	flag.BoolVar(&debug, "debug", false, "run with support for debuggers like delve")
 	flag.Parse()
 	err := providerserver.Serve(context.Background(), provider.New(version), providerserver.ServeOpts{
-		Address: "git.ddupan.top/ddupan/homelab",
+		Address: "terraform.lab.ddupan.top/ddupan/homelab",
 		Debug:   debug,
 	})
 	if err != nil {
