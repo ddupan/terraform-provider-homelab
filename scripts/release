@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Publishes one version to the static Terraform registry (https://terraform.lab.ddupan.top, the
-# terraform-registry bucket; see homelab-infra apps/seaweedfs/README.md). Run by the release job on a
-# v* tag. Credentials come from OpenBao through the job's SPIFFE identity
-# (spiffe://ddupan.top/ci/panxiao81/terraform-provider-homelab/release) and never reach argv, the
-# environment of other steps, or the log.
+# CI half of a release (job `release`, on a v* tag): build the zips and SHA256SUMS and upload them to
+# the registry bucket. Nothing is published yet: terraform only finds a version through the versions
+# index and the per-platform download documents, which scripts/publish writes on the maintainer's
+# machine after verifying and signing SHA256SUMS with the maintainer's own key (YubiKey). Upload
+# credentials come from OpenBao through the job's SPIFFE identity
+# (spiffe://ddupan.top/ci/panxiao81/terraform-provider-homelab/release), never via argv or the log.
 set -euo pipefail
 
 version=${1:?usage: scripts/release <version>}
@@ -13,6 +14,13 @@ s3=${S3_ENDPOINT:-http://seaweedfs-s3.seaweedfs.svc.cluster.local:8333}/terrafor
 bao=${BAO_ADDR:-https://bao.ad.ddupan.top:8200}
 socket=${SPIFFE_SOCKET:-/run/spire/agent-sockets/spire-agent.sock}
 platforms=(linux/amd64 linux/arm64)
+
+# A published version is immutable: its SHA256SUMS carries the maintainer's signature, and a rebuilt
+# zip (new timestamps, new hash) would make it uninstallable.
+if curl -fsS -o /dev/null "$registry/v1/providers/$namespace/$type/$version/download/linux/amd64" 2>/dev/null; then
+  echo "$namespace/$type $version is already published; tag a new version instead" >&2
+  exit 1
+fi
 
 umask 077
 work=$(mktemp -d)
@@ -42,52 +50,14 @@ token=$(jq -n --arg role ci-terraform-registry-publisher --rawfile jwt "$work/jw
   | curl -fsS -X POST --data @- "$bao/v1/auth/jwt-spire/login" | jq -er .auth.client_token)
 printf 'X-Vault-Token: %s\n' "$token" > "$work/bao-header"
 curl -fsS -H @"$work/bao-header" "$bao/v1/kv/data/k8s/terraform-registry-s3-publisher" > "$work/s3.json"
-curl -fsS -H @"$work/bao-header" "$bao/v1/kv/data/k8s/terraform-registry-signing" > "$work/signing.json"
 printf 'user = "%s:%s"\n' "$(jq -er .data.data.access_key "$work/s3.json")" "$(jq -er .data.data.secret_key "$work/s3.json")" > "$work/s3.curlrc"
-
-# Sign SHA256SUMS with the registry key (binary detached signature, as Terraform verifies it).
-export GNUPGHOME=$work/gnupg
-mkdir -p "$GNUPGHOME"
-jq -er .data.data.private_key "$work/signing.json" | gpg --batch --quiet --import
-key_id=$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1 == "sec" {print $5; exit}')
-gpg --batch --quiet --local-user "$key_id" --detach-sign --output "$dist/$sums.sig" "$dist/$sums"
-public_key=$(gpg --batch --armor --export "$key_id")
 
 put() { # put <local file> <key> <content type>
   curl -fsS -o /dev/null -K "$work/s3.curlrc" --aws-sigv4 "aws:amz:us-east-1:s3" \
     -H "Content-Type: $3" -T "$1" "$s3/$2"
 }
 
-base=v1/providers/$namespace/$type
 files=providers/$namespace/$type/$version
 for file in "$dist"/*; do put "$file" "$files/$(basename "$file")" application/octet-stream; done
 
-for platform in "${platforms[@]}"; do
-  os=${platform%/*} arch=${platform#*/}
-  zip=terraform-provider-${type}_${version}_${os}_${arch}.zip
-  jq -n --arg os "$os" --arg arch "$arch" --arg zip "$zip" --arg url "$registry/$files" --arg sums "$sums" \
-    --arg shasum "$(awk -v f="$zip" '$2 == f {print $1}' "$dist/$sums")" --arg key_id "$key_id" --arg key "$public_key" \
-    '{protocols: ["6.0"], os: $os, arch: $arch, filename: $zip, download_url: "\($url)/\($zip)",
-      shasums_url: "\($url)/\($sums)", shasums_signature_url: "\($url)/\($sums).sig", shasum: $shasum,
-      signing_keys: {gpg_public_keys: [{key_id: $key_id, ascii_armor: $key}]}}' > "$work/download.json"
-  put "$work/download.json" "$base/$version/download/$os/$arch" application/json
-done
-
-# Versions index: read-modify-write (releases are serialized by tags; a lost race only drops an entry,
-# which the next release of that version restores).
-status=$(curl -sS -o "$work/versions.json" -w '%{http_code}' -K "$work/s3.curlrc" --aws-sigv4 "aws:amz:us-east-1:s3" "$s3/$base/versions")
-case $status in
-  200) ;;
-  404) echo '{"versions": []}' > "$work/versions.json" ;; # first release
-  *) echo "cannot read the versions index (HTTP $status); refusing to overwrite it" >&2; exit 1 ;;
-esac
-platforms_json=$(printf '%s\n' "${platforms[@]}" | jq -R 'split("/") | {os: .[0], arch: .[1]}' | jq -s .)
-jq --arg v "$version" --argjson p "$platforms_json" \
-  '.versions = ([.versions[] | select(.version != $v)] + [{version: $v, protocols: ["6.0"], platforms: $p}])' \
-  "$work/versions.json" > "$work/versions.new.json"
-put "$work/versions.new.json" "$base/versions" application/json
-
-echo '{"providers.v1": "/v1/providers/"}' > "$work/discovery.json"
-put "$work/discovery.json" ".well-known/terraform.json" application/json
-
-echo "Published $namespace/$type $version ($(printf '%s ' "${platforms[@]}"))"
+echo "Uploaded $namespace/$type $version; publish with: scripts/publish $version"
