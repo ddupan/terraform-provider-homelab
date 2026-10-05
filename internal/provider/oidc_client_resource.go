@@ -160,6 +160,22 @@ func (r *oidcClientResource) Delete(ctx context.Context, req resource.DeleteRequ
 	}
 }
 
+// ModifyPlan marks the secret unknown when secret_rotation changes. Without it the secret's
+// UseStateForUnknown plans the old value, and the rotated one returned by apply makes Terraform
+// fail with "Provider produced inconsistent result after apply".
+func (r *oidcClientResource) ModifyPlan(ctx context.Context, req resource.ModifyPlanRequest, resp *resource.ModifyPlanResponse) {
+	if req.State.Raw.IsNull() || req.Plan.Raw.IsNull() {
+		return // create or destroy
+	}
+	var planned, prior types.String
+	resp.Diagnostics.Append(req.Plan.GetAttribute(ctx, path.Root("secret_rotation"), &planned)...)
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("secret_rotation"), &prior)...)
+	if resp.Diagnostics.HasError() || planned.Equal(prior) {
+		return
+	}
+	resp.Diagnostics.Append(resp.Plan.SetAttribute(ctx, path.Root("secret"), types.StringUnknown())...)
+}
+
 // ImportState adopts an existing client by ID. Its secret cannot be read back: set secret_rotation to obtain one.
 func (r *oidcClientResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
