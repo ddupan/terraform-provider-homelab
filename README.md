@@ -47,7 +47,13 @@ go build -o terraform-provider-homelab
 
 ## 发布
 
-打 `vX.Y.Z` tag 即发布：`release` job 测试后执行 `scripts/release`，构建 linux/amd64、linux/arm64 的 zip，
-用 registry 专用 GPG 密钥签名 `SHA256SUMS`，上传到静态 registry `https://terraform.lab.ddupan.top`
-（homelab-infra `apps/seaweedfs` 的 `terraform-registry` bucket）并更新 versions 索引。凭据经 job 的 SPIFFE 身份
-从 OpenBao（role `ci-terraform-registry-publisher`）取得，不出现在参数或日志中。
+发布分两半，签名只在维护者本机完成：
+
+1. 打 `vX.Y.Z` tag：`release` job 测试后执行 `scripts/release`，构建 linux/amd64、linux/arm64 的 zip 与
+   `SHA256SUMS`，上传到静态 registry 的 bucket（homelab-infra `apps/seaweedfs` 的 `terraform-registry`）。
+   此时 terraform 还找不到这个版本。已发布的版本拒绝再次上传（重建的 zip 哈希不同，会让已签名的版本失效）。
+2. 本机执行 `scripts/publish X.Y.Z`：下载 zip 与 `SHA256SUMS` 并逐一校验，用维护者 YubiKey 上的签名子钥
+   `8A887573EFE9762D`（主钥 `0166F47B5400ECC2`）签名（按提示触摸），再写签名、各平台 download 文档，最后更新
+   versions 索引。上传凭据经本机 SPIFFE 开发身份从 OpenBao 读取。
+
+签名子钥 **2027-04-07 到期**。延期后对每个已发布版本重新执行 `scripts/publish <version>`，刷新文档里嵌入的公钥。

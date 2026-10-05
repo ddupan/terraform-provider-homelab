@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# Maintainer half of a release, run locally after the `release` job uploaded a version:
+#   scripts/publish 0.1.0
+# Downloads the version's zips and SHA256SUMS, checks every zip against it (so what gets signed is what
+# terraform will download), signs SHA256SUMS with the maintainer's YubiKey signing subkey (touch the
+# key when asked), then writes the signature, the per-platform download documents and the versions
+# index. Re-running for a published version re-signs it and refreshes its documents, e.g. after the
+# subkey's expiry was extended (embedded public key).
+#
+# Upload credentials: kv/k8s/terraform-registry-s3-publisher via the local SPIFFE development identity.
+set -euo pipefail
+
+version=${1:?usage: scripts/publish <version>}
+namespace=ddupan type=homelab
+registry=https://terraform.lab.ddupan.top
+s3=${S3_ENDPOINT:-https://s3.lab.ddupan.top}/terraform-registry
+bao=${BAO_ADDR:-https://bao.ad.ddupan.top:8200}
+socket=${SPIFFE_SOCKET:-/run/spire/agent-sockets/spire-agent.sock}
+signing_key=8A887573EFE9762D   # YubiKey signing subkey of 0166F47B5400ECC2
+primary_key=0166F47B5400ECC2
+platforms=(linux/amd64 linux/arm64)
+
+umask 077
+work=$(mktemp -d)
+token=
+cleanup() {
+  [[ -n $token ]] && curl -fsS -o /dev/null -X POST -H @"$work/bao-header" "$bao/v1/auth/token/revoke-self" || true
+  rm -rf -- "$work"
+}
+trap cleanup EXIT
+
+files=providers/$namespace/$type/$version
+sums=terraform-provider-${type}_${version}_SHA256SUMS
+curl -fsS -o "$work/$sums" "$registry/$files/$sums" || { echo "no uploaded $version (did the release job run?)" >&2; exit 1; }
+for platform in "${platforms[@]}"; do
+  os=${platform%/*} arch=${platform#*/}
+  zip=terraform-provider-${type}_${version}_${os}_${arch}.zip
+  curl -fsS -o "$work/$zip" "$registry/$files/$zip"
+done
+(cd "$work" && sha256sum --check --strict --quiet "$sums")
+[[ $(wc -l < "$work/$sums") -eq ${#platforms[@]} ]] || { echo "SHA256SUMS lists unexpected files" >&2; exit 1; }
+
+# The trailing ! pins this exact subkey instead of letting gpg pick one.
+gpg --local-user "$signing_key!" --detach-sign --output "$work/$sums.sig" "$work/$sums"
+gpg --verify "$work/$sums.sig" "$work/$sums" 2>/dev/null
+public_key=$(gpg --armor --export "$primary_key")
+
+spire-agent api fetch jwt -audience openbao -socketPath "$socket" -output json > "$work/svid.json"
+jq -er '[.. | objects | .svid? // empty] | if length == 1 then .[0] else error("expected one JWT-SVID") end' "$work/svid.json" > "$work/jwt"
+token=$(jq -n --arg role local-development --rawfile jwt "$work/jwt" '{role: $role, jwt: ($jwt | rtrimstr("\n"))}' \
+  | curl -fsS -X POST --data @- "$bao/v1/auth/jwt-spire/login" | jq -er .auth.client_token)
+printf 'X-Vault-Token: %s\n' "$token" > "$work/bao-header"
+curl -fsS -H @"$work/bao-header" "$bao/v1/kv/data/k8s/terraform-registry-s3-publisher" > "$work/s3.json"
+printf 'user = "%s:%s"\n' "$(jq -er .data.data.access_key "$work/s3.json")" "$(jq -er .data.data.secret_key "$work/s3.json")" > "$work/s3.curlrc"
+
+put() { # put <local file> <key> <content type>
+  curl -fsS -o /dev/null -K "$work/s3.curlrc" --aws-sigv4 "aws:amz:us-east-1:s3" \
+    -H "Content-Type: $3" -T "$1" "$s3/$2"
+}
+
+put "$work/$sums.sig" "$files/$sums.sig" application/octet-stream
+base=v1/providers/$namespace/$type
+for platform in "${platforms[@]}"; do
+  os=${platform%/*} arch=${platform#*/}
+  zip=terraform-provider-${type}_${version}_${os}_${arch}.zip
+  jq -n --arg os "$os" --arg arch "$arch" --arg zip "$zip" --arg url "$registry/$files" --arg sums "$sums" \
+    --arg shasum "$(awk -v f="$zip" '$2 == f {print $1}' "$work/$sums")" --arg key_id "$primary_key" --arg key "$public_key" \
+    '{protocols: ["6.0"], os: $os, arch: $arch, filename: $zip, download_url: "\($url)/\($zip)",
+      shasums_url: "\($url)/\($sums)", shasums_signature_url: "\($url)/\($sums).sig", shasum: $shasum,
+      signing_keys: {gpg_public_keys: [{key_id: $key_id, ascii_armor: $key}]}}' > "$work/download.json"
+  put "$work/download.json" "$base/$version/download/$os/$arch" application/json
+done
+
+# Versions index last: until it lists the version, terraform cannot select it.
+status=$(curl -sS -o "$work/versions.json" -w '%{http_code}' "$registry/$base/versions")
+case $status in
+  200) ;;
+  404) echo '{"versions": []}' > "$work/versions.json" ;; # first release
+  *) echo "cannot read the versions index (HTTP $status); refusing to overwrite it" >&2; exit 1 ;;
+esac
+platforms_json=$(printf '%s\n' "${platforms[@]}" | jq -R 'split("/") | {os: .[0], arch: .[1]}' | jq -s .)
+jq --arg v "$version" --argjson p "$platforms_json" \
+  '.versions = ([.versions[] | select(.version != $v)] + [{version: $v, protocols: ["6.0"], platforms: $p}])' \
+  "$work/versions.json" > "$work/versions.new.json"
+put "$work/versions.new.json" "$base/versions" application/json
+echo '{"providers.v1": "/v1/providers/"}' > "$work/discovery.json"
+put "$work/discovery.json" ".well-known/terraform.json" application/json
+
+echo "Published $namespace/$type $version, signed by $signing_key"
