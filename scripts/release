@@ -10,17 +10,22 @@ set -euo pipefail
 version=${1:?usage: scripts/release <version>}
 namespace=ddupan type=homelab
 registry=https://terraform.lab.ddupan.top
-s3=${S3_ENDPOINT:-http://seaweedfs-s3.seaweedfs.svc.cluster.local:8333}/terraform-registry
+# The pod pool spans two clusters (homelab and sandbox): only LAN names resolve in both, not the
+# homelab cluster's Service names (a sandbox-placed v0.1.1 run failed on exactly that).
+s3=${S3_ENDPOINT:-https://s3.lab.ddupan.top}/terraform-registry
 bao=${BAO_ADDR:-https://bao.ad.ddupan.top:8200}
 socket=${SPIFFE_SOCKET:-/run/spire/agent-sockets/spire-agent.sock}
 platforms=(linux/amd64 linux/arm64)
 
 # A published version is immutable: its SHA256SUMS carries the maintainer's signature, and a rebuilt
 # zip (new timestamps, new hash) would make it uninstallable.
-if curl -fsS -o /dev/null "$registry/v1/providers/$namespace/$type/$version/download/linux/amd64" 2>/dev/null; then
-  echo "$namespace/$type $version is already published; tag a new version instead" >&2
-  exit 1
-fi
+# Only a 404 means "not published": an unreachable registry must not be mistaken for it.
+status=$(curl -sS -o /dev/null -w '%{http_code}' "$registry/v1/providers/$namespace/$type/$version/download/linux/amd64")
+case $status in
+  404) ;;
+  200) echo "$namespace/$type $version is already published; tag a new version instead" >&2; exit 1 ;;
+  *) echo "cannot check whether $version is published (HTTP $status)" >&2; exit 1 ;;
+esac
 
 umask 077
 work=$(mktemp -d)
