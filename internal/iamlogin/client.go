@@ -29,6 +29,9 @@ type OIDCClient struct {
 	PostLogoutRedirectURIs []string `json:"postLogoutRedirectUris"`
 	LoginEnabled           bool     `json:"loginEnabled"`
 	PKCERequired           bool     `json:"pkceRequired"`
+	PublicClient           bool     `json:"publicClient"`
+	DeviceAuthorization    bool     `json:"deviceAuthorization"`
+	Audiences              []string `json:"audiences"`
 }
 
 type Client struct {
@@ -48,7 +51,7 @@ func New(endpoint string, token TokenSource, httpClient *http.Client) (*Client, 
 	return &Client{endpoint: u, http: httpClient, token: token}, nil
 }
 
-// Create registers a client; the secret is returned only here (and by RotateSecret).
+// Create registers a client; the secret is returned only here (and by RotateSecret), and is empty for a public client.
 func (c *Client) Create(ctx context.Context, client OIDCClient) (OIDCClient, string, error) {
 	var created struct {
 		Client OIDCClient `json:"client"`

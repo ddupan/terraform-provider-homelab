@@ -13,11 +13,13 @@ func (r *oidcClientResource) toAPI(ctx context.Context, m oidcClientModel, diags
 	client := iamlogin.OIDCClient{
 		ID: m.ID.ValueString(), Name: m.Name.ValueString(),
 		LoginEnabled: m.LoginEnabled.ValueBool(), PKCERequired: m.PKCERequired.ValueBool(),
-		RedirectURIs: []string{}, Scopes: []string{}, PostLogoutRedirectURIs: []string{},
+		PublicClient: m.PublicClient.ValueBool(), DeviceAuthorization: m.DeviceAuthorization.ValueBool(),
+		RedirectURIs: []string{}, Scopes: []string{}, PostLogoutRedirectURIs: []string{}, Audiences: []string{},
 	}
 	diags.Append(m.RedirectURIs.ElementsAs(ctx, &client.RedirectURIs, false)...)
 	diags.Append(m.Scopes.ElementsAs(ctx, &client.Scopes, false)...)
 	diags.Append(m.PostLogoutRedirectURIs.ElementsAs(ctx, &client.PostLogoutRedirectURIs, false)...)
+	diags.Append(m.Audiences.ElementsAs(ctx, &client.Audiences, false)...)
 	return client
 }
 
@@ -27,12 +29,16 @@ func (r *oidcClientResource) fromAPI(ctx context.Context, c iamlogin.OIDCClient,
 	m.Name = types.StringValue(c.Name)
 	m.LoginEnabled = types.BoolValue(c.LoginEnabled)
 	m.PKCERequired = types.BoolValue(c.PKCERequired)
+	m.PublicClient = types.BoolValue(c.PublicClient)
+	m.DeviceAuthorization = types.BoolValue(c.DeviceAuthorization)
 	var d diag.Diagnostics
 	m.RedirectURIs, d = types.ListValueFrom(ctx, types.StringType, nonNil(c.RedirectURIs))
 	diags.Append(d...)
 	m.Scopes, d = types.SetValueFrom(ctx, types.StringType, nonNil(c.Scopes))
 	diags.Append(d...)
 	m.PostLogoutRedirectURIs, d = types.ListValueFrom(ctx, types.StringType, nonNil(c.PostLogoutRedirectURIs))
+	diags.Append(d...)
+	m.Audiences, d = types.ListValueFrom(ctx, types.StringType, nonNil(c.Audiences))
 	diags.Append(d...)
 }
 
