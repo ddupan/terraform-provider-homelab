@@ -6,7 +6,7 @@ Workload API 取对应 audience 的 JWT-SVID，provider 不保存任何凭据。
 
 | 资源 | 后端 | 说明 |
 |---|---|---|
-| `homelab_oidc_client` | iam-login（`sso.ddupan.top`） | confidential 授权码 OIDC 客户端；secret 只在创建/轮换时可得 |
+| `homelab_oidc_client` | iam-login（`sso.ddupan.top`） | 授权码 OIDC 客户端（confidential 或 public）；secret 只在创建/轮换时可得 |
 
 ## 用法
 
@@ -34,6 +34,21 @@ resource "homelab_oidc_client" "gitea" {
 - 调用方的 SPIFFE ID 须在 iam-login 的 `iam.clients.spiffe.admin-ids` 中，JWT-SVID audience 为 `iam-login`。
 - `secret` 为 sensitive，会进入 state；把它写入 OpenBao（如 `vault_kv_secret_v2`）供应用读取。state 本身按敏感数据保管。
 - 改 `secret_rotation` 的值即轮换 secret，旧值立即失效。
+- public 客户端（CLI、浏览器应用，如 Incus）：`public_client = true`，没有 secret（`secret` 为 null），必须保持
+  `pkce_required = true`；创建后不能改类型（改动即替换）。`device_authorization = true` 另外开启 device 授权
+  （RFC 8628）；`audiences` 给自己校验 `aud` 的资源加上额外 audience。需要 iam-login 支持这三个字段的版本。
+
+  ```hcl
+  resource "homelab_oidc_client" "incus" {
+    id                   = "incus"
+    name                 = "Incus"
+    redirect_uris        = ["https://incus.lab.ddupan.top/oidc/callback"]
+    scopes               = ["openid", "offline_access"]
+    public_client        = true
+    device_authorization = true
+    audiences            = ["https://incus.lab.ddupan.top"]
+  }
+  ```
 - 导入：`terraform import homelab_oidc_client.gitea gitea`。已有 secret 无法读回，导入后设置 `secret_rotation` 取得新 secret。
 
 ## 开发

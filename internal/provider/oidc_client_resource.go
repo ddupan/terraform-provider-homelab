@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -28,6 +29,9 @@ type oidcClientModel struct {
 	PostLogoutRedirectURIs types.List   `tfsdk:"post_logout_redirect_uris"`
 	LoginEnabled           types.Bool   `tfsdk:"login_enabled"`
 	PKCERequired           types.Bool   `tfsdk:"pkce_required"`
+	PublicClient           types.Bool   `tfsdk:"public_client"`
+	DeviceAuthorization    types.Bool   `tfsdk:"device_authorization"`
+	Audiences              types.List   `tfsdk:"audiences"`
 	SecretRotation         types.String `tfsdk:"secret_rotation"`
 	Secret                 types.String `tfsdk:"secret"`
 }
@@ -38,7 +42,7 @@ func (r *oidcClientResource) Metadata(_ context.Context, req resource.MetadataRe
 
 func (r *oidcClientResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "A confidential authorization-code OIDC client of iam-login (client_secret_basic).",
+		Description: "An authorization-code OIDC client of iam-login: confidential (client_secret_basic) or public (no secret).",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Required: true, Description: "Client ID. Changing it replaces the client.",
@@ -62,13 +66,27 @@ func (r *oidcClientResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional: true, Computed: true, Default: booldefault.StaticBool(true),
 				Description: "Turn off only for confidential clients that cannot send PKCE (e.g. Gitea 1.27).",
 			},
+			"public_client": schema.BoolAttribute{
+				Optional: true, Computed: true, Default: booldefault.StaticBool(false),
+				Description:   "No secret (a CLI or browser app); requires pkce_required. Fixed at creation: changing it replaces the client.",
+				PlanModifiers: []planmodifier.Bool{boolplanmodifier.RequiresReplace()},
+			},
+			"device_authorization": schema.BoolAttribute{
+				Optional: true, Computed: true, Default: booldefault.StaticBool(false),
+				Description: "Also the device grant (RFC 8628), for clients without a browser.",
+			},
+			"audiences": schema.ListAttribute{
+				Optional: true, Computed: true, ElementType: types.StringType,
+				Default:     listdefault.StaticValue(types.ListValueMust(types.StringType, nil)),
+				Description: "Extra access-token audiences, for resources that check aud.",
+			},
 			"secret_rotation": schema.StringAttribute{
 				Optional:    true,
-				Description: "Any value; changing it rotates the secret (the old one stops working immediately).",
+				Description: "Any value; changing it rotates the secret (the old one stops working immediately). Not for public clients.",
 			},
 			"secret": schema.StringAttribute{
 				Computed: true, Sensitive: true,
-				Description: "Client secret, known only from creation or rotation; null after import until rotated.",
+				Description:   "Client secret, known only from creation or rotation; null after import until rotated, and for public clients.",
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 		},
@@ -100,7 +118,10 @@ func (r *oidcClientResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 	r.fromAPI(ctx, created, &plan, &resp.Diagnostics)
-	plan.Secret = types.StringValue(secret)
+	plan.Secret = types.StringNull()
+	if secret != "" {
+		plan.Secret = types.StringValue(secret)
+	}
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 

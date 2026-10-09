@@ -9,6 +9,26 @@ import (
 	"testing"
 )
 
+// Field names on the wire, as iam-login's OidcClient record reads them.
+func TestClientFieldsMatchTheAPI(t *testing.T) {
+	body, _ := json.Marshal(OIDCClient{ID: "incus", PublicClient: true, DeviceAuthorization: true, Audiences: []string{"https://incus"}})
+	var wire map[string]any
+	_ = json.Unmarshal(body, &wire)
+	for _, field := range []string{"publicClient", "deviceAuthorization", "audiences", "pkceRequired", "loginEnabled"} {
+		if _, ok := wire[field]; !ok {
+			t.Errorf("missing %s in %s", field, body)
+		}
+	}
+	var created struct {
+		Client OIDCClient `json:"client"`
+		Secret string     `json:"secret"`
+	}
+	if err := json.Unmarshal([]byte(`{"client":{"id":"incus","publicClient":true,"audiences":["https://incus"]},"secret":null}`), &created); err != nil ||
+		!created.Client.PublicClient || created.Secret != "" || created.Client.Audiences[0] != "https://incus" {
+		t.Fatalf("public client response: %+v %v", created, err)
+	}
+}
+
 // The wire contract with iam-login's /api/iam/clients (docs/client-management.md).
 func TestClientSpeaksTheManagementAPI(t *testing.T) {
 	stored := map[string]OIDCClient{}
