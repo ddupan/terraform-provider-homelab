@@ -7,6 +7,7 @@ Workload API 取对应 audience 的 JWT-SVID，provider 不保存任何凭据。
 | 资源 | 后端 | 说明 |
 |---|---|---|
 | `homelab_oidc_client` | iam-login（`sso.ddupan.top`） | 授权码 OIDC 客户端（confidential 或 public）；secret 只在创建/轮换时可得 |
+| `homelab_machine_client` | iam-login（`sso.ddupan.top`） | 机器客户端：以 SPIFFE JWT-SVID 认证换 `client_credentials` token，没有 secret |
 
 ## 用法
 
@@ -53,6 +54,25 @@ resource "homelab_oidc_client" "gitea" {
   只给发不了 Basic 的应用设 `client_secret_post`（如 Artifact Keeper）；public 客户端固定 `none`。从配置里删掉
   不会改回，要改回就显式写 `client_secret_basic`。需要支持该字段的 iam-login 版本。
 - 导入：`terraform import homelab_oidc_client.gitea gitea`。已有 secret 无法读回，导入后设置 `secret_rotation` 取得新 secret。
+
+## 机器客户端
+
+工作负载以自己的 JWT-SVID（audience 为 iam-login 的 issuer，如 `https://sso.ddupan.top`）在 token 端点认证，
+`client_id` 填资源的 `id`，换取 iam-login 签发的 access token，再交给按 `iss` + `aud` 认 token 的下游。
+
+```hcl
+resource "homelab_machine_client" "ci_publisher" {
+  id        = "ci-publisher"
+  name      = "CI 发布"
+  spiffe_id = "spiffe://ddupan.top/ci/*" # 以 /* 结尾：该路径下的所有工作负载（按整段匹配）
+  scopes    = ["artifacts.write"]
+  audiences = ["artifact-keeper"]        # 下游校验的 aud
+}
+```
+
+- `enabled = false` 立即停止签发。
+- 需要支持 `/api/iam/machine-clients` 的 iam-login 版本。
+- 导入：`terraform import homelab_machine_client.ci_publisher ci-publisher`。
 
 ## 开发
 
