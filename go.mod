@@ -1,6 +1,6 @@
 module git.ddupan.top/panxiao81/terraform-provider-homelab
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
