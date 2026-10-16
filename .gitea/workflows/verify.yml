@@ -14,13 +14,10 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
-      - uses: https://git.ddupan.top/panxiao81/ci-actions/setup-artifact-keeper@f2fef46449508adec3bd92e825cb6e369161158b # v1
+      - uses: https://git.ddupan.top/panxiao81/ci-actions/setup-artifact-keeper@d4d8f283dfadac168abc9c7b30036b34d9125fdb # v1
         with:
           go: 'true'
-      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417
-        with:
           go-version-file: go.mod
-          cache: true
       - name: Module is tidy
         run: |
           go mod tidy
