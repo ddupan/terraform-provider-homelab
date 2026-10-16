@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -18,6 +19,14 @@ func TestClientFieldsMatchTheAPI(t *testing.T) {
 		if _, ok := wire[field]; !ok {
 			t.Errorf("missing %s in %s", field, body)
 		}
+	}
+	// Omitted unless set, so the server applies its default (RFC 7591: client_secret_basic).
+	if _, ok := wire["tokenEndpointAuthMethod"]; ok {
+		t.Errorf("unset tokenEndpointAuthMethod sent: %s", body)
+	}
+	post, _ := json.Marshal(OIDCClient{ID: "ak", TokenEndpointAuthMethod: "client_secret_post"})
+	if !strings.Contains(string(post), `"tokenEndpointAuthMethod":"client_secret_post"`) {
+		t.Errorf("tokenEndpointAuthMethod not sent: %s", post)
 	}
 	var created struct {
 		Client OIDCClient `json:"client"`

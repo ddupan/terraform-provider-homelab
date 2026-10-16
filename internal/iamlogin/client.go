@@ -32,6 +32,8 @@ type OIDCClient struct {
 	PublicClient           bool     `json:"publicClient"`
 	DeviceAuthorization    bool     `json:"deviceAuthorization"`
 	Audiences              []string `json:"audiences"`
+	// RFC 7591 token_endpoint_auth_method; omitted means the server's default (client_secret_basic, none if public).
+	TokenEndpointAuthMethod string `json:"tokenEndpointAuthMethod,omitempty"`
 }
 
 type Client struct {
