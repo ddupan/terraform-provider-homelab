@@ -89,3 +89,60 @@ func TestClientSpeaksTheManagementAPI(t *testing.T) {
 		t.Fatal("a missing SPIFFE identity must fail the request")
 	}
 }
+
+// The wire contract with iam-login's /api/iam/machine-clients (MachineClient in docs/openapi.yaml).
+func TestClientSpeaksTheMachineClientAPI(t *testing.T) {
+	stored := map[string]MachineClient{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/iam/machine-clients":
+			var wire map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&wire)
+			if wire["spiffeId"] != "spiffe://ddupan.top/ci/*" || wire["enabled"] != true {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			c := MachineClient{ID: wire["id"].(string), Name: wire["name"].(string), SPIFFEID: wire["spiffeId"].(string), Enabled: true}
+			stored[c.ID] = c
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(c)
+		case r.Method == http.MethodPut && r.URL.Path == "/api/iam/machine-clients/ci":
+			var c MachineClient
+			_ = json.NewDecoder(r.Body).Decode(&c)
+			stored["ci"] = c
+			_ = json.NewEncoder(w).Encode(c)
+		case r.Method == http.MethodGet && r.URL.Path == "/api/iam/machine-clients/ci":
+			c, ok := stored["ci"]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(c)
+		case r.Method == http.MethodDelete && r.URL.Path == "/api/iam/machine-clients/ci":
+			delete(stored, "ci")
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			w.WriteHeader(http.StatusTeapot)
+		}
+	}))
+	defer server.Close()
+	api, _ := New(server.URL, func(context.Context) (string, error) { return "svid", nil }, server.Client())
+	ctx := context.Background()
+	want := MachineClient{ID: "ci", Name: "CI", SPIFFEID: "spiffe://ddupan.top/ci/*", Scopes: []string{}, Audiences: []string{"artifact-keeper"}, Enabled: true}
+	if created, err := api.CreateMachine(ctx, want); err != nil || created.SPIFFEID != want.SPIFFEID {
+		t.Fatalf("create: %+v %v", created, err)
+	}
+	want.Enabled = false
+	if updated, err := api.UpdateMachine(ctx, want); err != nil || updated.Enabled {
+		t.Fatalf("update: %+v %v", updated, err)
+	}
+	if got, err := api.GetMachine(ctx, "ci"); err != nil || got.Enabled || got.Audiences[0] != "artifact-keeper" {
+		t.Fatalf("get: %+v %v", got, err)
+	}
+	if err := api.DeleteMachine(ctx, "ci"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := api.GetMachine(ctx, "ci"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("get after delete: %v", err)
+	}
+}

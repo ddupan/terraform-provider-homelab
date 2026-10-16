@@ -102,7 +102,7 @@ func svidSource(socket, audience string) iamlogin.TokenSource {
 }
 
 func (p *homelab) Resources(context.Context) []func() resource.Resource {
-	return []func() resource.Resource{newOIDCClientResource}
+	return []func() resource.Resource{newOIDCClientResource, newMachineClientResource}
 }
 
 func (p *homelab) DataSources(context.Context) []func() datasource.DataSource { return nil }

@@ -1,4 +1,4 @@
-// Package iamlogin is the HTTP client for iam-login's client-management API (/api/iam/clients).
+// Package iamlogin is the HTTP client for iam-login's client-management API (/api/iam/clients, /api/iam/machine-clients).
 package iamlogin
 
 import (
@@ -32,6 +32,17 @@ type OIDCClient struct {
 	PublicClient           bool     `json:"publicClient"`
 	DeviceAuthorization    bool     `json:"deviceAuthorization"`
 	Audiences              []string `json:"audiences"`
+}
+
+// MachineClient mirrors the API's machine client: a workload that authenticates with its SPIFFE JWT-SVID
+// (spiffe_jwt) and gets client_credentials tokens. It has no secret.
+type MachineClient struct {
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	SPIFFEID  string   `json:"spiffeId"`
+	Scopes    []string `json:"scopes"`
+	Audiences []string `json:"audiences"`
+	Enabled   bool     `json:"enabled"`
 }
 
 type Client struct {
@@ -84,6 +95,28 @@ func (c *Client) RotateSecret(ctx context.Context, id string) (string, error) {
 	}
 	err := c.do(ctx, http.MethodPost, "/api/iam/clients/"+url.PathEscape(id)+"/secret", nil, http.StatusOK, &rotated)
 	return rotated.Secret, err
+}
+
+func (c *Client) CreateMachine(ctx context.Context, client MachineClient) (MachineClient, error) {
+	var created MachineClient
+	err := c.do(ctx, http.MethodPost, "/api/iam/machine-clients", client, http.StatusCreated, &created)
+	return created, err
+}
+
+func (c *Client) GetMachine(ctx context.Context, id string) (MachineClient, error) {
+	var client MachineClient
+	err := c.do(ctx, http.MethodGet, "/api/iam/machine-clients/"+url.PathEscape(id), nil, http.StatusOK, &client)
+	return client, err
+}
+
+func (c *Client) UpdateMachine(ctx context.Context, client MachineClient) (MachineClient, error) {
+	var updated MachineClient
+	err := c.do(ctx, http.MethodPut, "/api/iam/machine-clients/"+url.PathEscape(client.ID), client, http.StatusOK, &updated)
+	return updated, err
+}
+
+func (c *Client) DeleteMachine(ctx context.Context, id string) error {
+	return c.do(ctx, http.MethodDelete, "/api/iam/machine-clients/"+url.PathEscape(id), nil, http.StatusNoContent, nil)
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body any, want int, out any) error {
