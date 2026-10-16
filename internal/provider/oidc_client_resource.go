@@ -22,18 +22,19 @@ func newOIDCClientResource() resource.Resource { return &oidcClientResource{} }
 type oidcClientResource struct{ api *iamlogin.Client }
 
 type oidcClientModel struct {
-	ID                     types.String `tfsdk:"id"`
-	Name                   types.String `tfsdk:"name"`
-	RedirectURIs           types.List   `tfsdk:"redirect_uris"`
-	Scopes                 types.Set    `tfsdk:"scopes"`
-	PostLogoutRedirectURIs types.List   `tfsdk:"post_logout_redirect_uris"`
-	LoginEnabled           types.Bool   `tfsdk:"login_enabled"`
-	PKCERequired           types.Bool   `tfsdk:"pkce_required"`
-	PublicClient           types.Bool   `tfsdk:"public_client"`
-	DeviceAuthorization    types.Bool   `tfsdk:"device_authorization"`
-	Audiences              types.List   `tfsdk:"audiences"`
-	SecretRotation         types.String `tfsdk:"secret_rotation"`
-	Secret                 types.String `tfsdk:"secret"`
+	ID                      types.String `tfsdk:"id"`
+	Name                    types.String `tfsdk:"name"`
+	RedirectURIs            types.List   `tfsdk:"redirect_uris"`
+	Scopes                  types.Set    `tfsdk:"scopes"`
+	PostLogoutRedirectURIs  types.List   `tfsdk:"post_logout_redirect_uris"`
+	LoginEnabled            types.Bool   `tfsdk:"login_enabled"`
+	PKCERequired            types.Bool   `tfsdk:"pkce_required"`
+	PublicClient            types.Bool   `tfsdk:"public_client"`
+	DeviceAuthorization     types.Bool   `tfsdk:"device_authorization"`
+	Audiences               types.List   `tfsdk:"audiences"`
+	TokenEndpointAuthMethod types.String `tfsdk:"token_endpoint_auth_method"`
+	SecretRotation          types.String `tfsdk:"secret_rotation"`
+	Secret                  types.String `tfsdk:"secret"`
 }
 
 func (r *oidcClientResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -79,6 +80,13 @@ func (r *oidcClientResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional: true, Computed: true, ElementType: types.StringType,
 				Default:     listdefault.StaticValue(types.ListValueMust(types.StringType, nil)),
 				Description: "Extra access-token audiences, for resources that check aud.",
+			},
+			"token_endpoint_auth_method": schema.StringAttribute{
+				Optional: true, Computed: true,
+				Description: "RFC 7591 token_endpoint_auth_method: client_secret_basic (the default) or client_secret_post, " +
+					"only for an application that cannot send Basic. Always none for a public client. Removing it from " +
+					"the configuration keeps the current method; set client_secret_basic to go back.",
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"secret_rotation": schema.StringAttribute{
 				Optional:    true,

@@ -20,6 +20,9 @@ func (r *oidcClientResource) toAPI(ctx context.Context, m oidcClientModel, diags
 	diags.Append(m.Scopes.ElementsAs(ctx, &client.Scopes, false)...)
 	diags.Append(m.PostLogoutRedirectURIs.ElementsAs(ctx, &client.PostLogoutRedirectURIs, false)...)
 	diags.Append(m.Audiences.ElementsAs(ctx, &client.Audiences, false)...)
+	if !m.TokenEndpointAuthMethod.IsNull() && !m.TokenEndpointAuthMethod.IsUnknown() {
+		client.TokenEndpointAuthMethod = m.TokenEndpointAuthMethod.ValueString()
+	}
 	return client
 }
 
@@ -31,6 +34,7 @@ func (r *oidcClientResource) fromAPI(ctx context.Context, c iamlogin.OIDCClient,
 	m.PKCERequired = types.BoolValue(c.PKCERequired)
 	m.PublicClient = types.BoolValue(c.PublicClient)
 	m.DeviceAuthorization = types.BoolValue(c.DeviceAuthorization)
+	m.TokenEndpointAuthMethod = types.StringValue(c.TokenEndpointAuthMethod)
 	var d diag.Diagnostics
 	m.RedirectURIs, d = types.ListValueFrom(ctx, types.StringType, nonNil(c.RedirectURIs))
 	diags.Append(d...)

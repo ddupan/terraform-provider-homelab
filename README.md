@@ -49,6 +49,9 @@ resource "homelab_oidc_client" "gitea" {
     audiences            = ["https://incus.lab.ddupan.top"]
   }
   ```
+- `token_endpoint_auth_method`（RFC 7591）：confidential 客户端出示 secret 的方式，缺省 `client_secret_basic`。
+  只给发不了 Basic 的应用设 `client_secret_post`（如 Artifact Keeper）；public 客户端固定 `none`。从配置里删掉
+  不会改回，要改回就显式写 `client_secret_basic`。需要支持该字段的 iam-login 版本。
 - 导入：`terraform import homelab_oidc_client.gitea gitea`。已有 secret 无法读回，导入后设置 `secret_rotation` 取得新 secret。
 
 ## 开发
