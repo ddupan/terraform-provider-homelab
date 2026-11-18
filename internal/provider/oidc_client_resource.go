@@ -9,8 +9,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
@@ -24,14 +24,14 @@ type oidcClientResource struct{ api *iamlogin.Client }
 type oidcClientModel struct {
 	ID                      types.String `tfsdk:"id"`
 	Name                    types.String `tfsdk:"name"`
-	RedirectURIs            types.List   `tfsdk:"redirect_uris"`
+	RedirectURIs            types.Set    `tfsdk:"redirect_uris"`
 	Scopes                  types.Set    `tfsdk:"scopes"`
-	PostLogoutRedirectURIs  types.List   `tfsdk:"post_logout_redirect_uris"`
+	PostLogoutRedirectURIs  types.Set    `tfsdk:"post_logout_redirect_uris"`
 	LoginEnabled            types.Bool   `tfsdk:"login_enabled"`
 	PKCERequired            types.Bool   `tfsdk:"pkce_required"`
 	PublicClient            types.Bool   `tfsdk:"public_client"`
 	DeviceAuthorization     types.Bool   `tfsdk:"device_authorization"`
-	Audiences               types.List   `tfsdk:"audiences"`
+	Audiences               types.Set    `tfsdk:"audiences"`
 	TokenEndpointAuthMethod types.String `tfsdk:"token_endpoint_auth_method"`
 	SecretRotation          types.String `tfsdk:"secret_rotation"`
 	Secret                  types.String `tfsdk:"secret"`
@@ -50,14 +50,14 @@ func (r *oidcClientResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.RequiresReplace()},
 			},
 			"name":          schema.StringAttribute{Required: true},
-			"redirect_uris": schema.ListAttribute{Required: true, ElementType: types.StringType},
+			"redirect_uris": schema.SetAttribute{Required: true, ElementType: types.StringType},
 			"scopes": schema.SetAttribute{
 				Required: true, ElementType: types.StringType,
 				Description: "Must include openid. offline_access also grants refresh tokens. Scopes are delegation, not permission.",
 			},
-			"post_logout_redirect_uris": schema.ListAttribute{
+			"post_logout_redirect_uris": schema.SetAttribute{
 				Optional: true, Computed: true, ElementType: types.StringType,
-				Default: listdefault.StaticValue(types.ListValueMust(types.StringType, nil)),
+				Default: setdefault.StaticValue(types.SetValueMust(types.StringType, nil)),
 			},
 			"login_enabled": schema.BoolAttribute{
 				Optional: true, Computed: true, Default: booldefault.StaticBool(true),
@@ -76,9 +76,9 @@ func (r *oidcClientResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional: true, Computed: true, Default: booldefault.StaticBool(false),
 				Description: "Also the device grant (RFC 8628), for clients without a browser.",
 			},
-			"audiences": schema.ListAttribute{
+			"audiences": schema.SetAttribute{
 				Optional: true, Computed: true, ElementType: types.StringType,
-				Default:     listdefault.StaticValue(types.ListValueMust(types.StringType, nil)),
+				Default:     setdefault.StaticValue(types.SetValueMust(types.StringType, nil)),
 				Description: "Extra access-token audiences, for resources that check aud.",
 			},
 			"token_endpoint_auth_method": schema.StringAttribute{

@@ -36,13 +36,13 @@ func (r *oidcClientResource) fromAPI(ctx context.Context, c iamlogin.OIDCClient,
 	m.DeviceAuthorization = types.BoolValue(c.DeviceAuthorization)
 	m.TokenEndpointAuthMethod = types.StringValue(c.TokenEndpointAuthMethod)
 	var d diag.Diagnostics
-	m.RedirectURIs, d = types.ListValueFrom(ctx, types.StringType, nonNil(c.RedirectURIs))
+	m.RedirectURIs, d = types.SetValueFrom(ctx, types.StringType, nonNil(c.RedirectURIs))
 	diags.Append(d...)
 	m.Scopes, d = types.SetValueFrom(ctx, types.StringType, nonNil(c.Scopes))
 	diags.Append(d...)
-	m.PostLogoutRedirectURIs, d = types.ListValueFrom(ctx, types.StringType, nonNil(c.PostLogoutRedirectURIs))
+	m.PostLogoutRedirectURIs, d = types.SetValueFrom(ctx, types.StringType, nonNil(c.PostLogoutRedirectURIs))
 	diags.Append(d...)
-	m.Audiences, d = types.ListValueFrom(ctx, types.StringType, nonNil(c.Audiences))
+	m.Audiences, d = types.SetValueFrom(ctx, types.StringType, nonNil(c.Audiences))
 	diags.Append(d...)
 }
 
