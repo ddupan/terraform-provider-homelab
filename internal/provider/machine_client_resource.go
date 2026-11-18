@@ -9,7 +9,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/setdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
@@ -27,7 +26,7 @@ type machineClientModel struct {
 	Name      types.String `tfsdk:"name"`
 	SPIFFEID  types.String `tfsdk:"spiffe_id"`
 	Scopes    types.Set    `tfsdk:"scopes"`
-	Audiences types.List   `tfsdk:"audiences"`
+	Audiences types.Set    `tfsdk:"audiences"`
 	Enabled   types.Bool   `tfsdk:"enabled"`
 }
 
@@ -54,9 +53,9 @@ func (r *machineClientResource) Schema(_ context.Context, _ resource.SchemaReque
 				Default:     setdefault.StaticValue(types.SetValueMust(types.StringType, nil)),
 				Description: "Scopes the client may request.",
 			},
-			"audiences": schema.ListAttribute{
+			"audiences": schema.SetAttribute{
 				Optional: true, Computed: true, ElementType: types.StringType,
-				Default:     listdefault.StaticValue(types.ListValueMust(types.StringType, nil)),
+				Default:     setdefault.StaticValue(types.SetValueMust(types.StringType, nil)),
 				Description: "Extra access-token audiences, for resources that check aud.",
 			},
 			"enabled": schema.BoolAttribute{
@@ -163,6 +162,6 @@ func machineFromAPI(ctx context.Context, c iamlogin.MachineClient, m *machineCli
 	var d diag.Diagnostics
 	m.Scopes, d = types.SetValueFrom(ctx, types.StringType, nonNil(c.Scopes))
 	diags.Append(d...)
-	m.Audiences, d = types.ListValueFrom(ctx, types.StringType, nonNil(c.Audiences))
+	m.Audiences, d = types.SetValueFrom(ctx, types.StringType, nonNil(c.Audiences))
 	diags.Append(d...)
 }
