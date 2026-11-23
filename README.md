@@ -4,6 +4,10 @@ Homelab 平台自有 API 的 Terraform provider。所有后端都以调用方的
 Workload API 取对应 audience 的 JWT-SVID，provider 不保存任何凭据。资源按领域命名（`homelab_<domain>_…`），
 新后端以 provider 配置中独立的块接入。
 
+没有 Workload API socket 的环境（GitHub Actions 经 spire-identity-exchange 取 SVID）可以设
+`HOMELAB_JWT_SVID_IAM_LOGIN`：设置时直接用这个 JWT-SVID（aud `iam-login`）调用 iam-login，优先于
+`spiffe_endpoint_socket`。调用方负责在 SVID 有效期内完成这次运行。
+
 | 资源 | 后端 | 说明 |
 |---|---|---|
 | `homelab_oidc_client` | iam-login（`sso.ddupan.top`） | 授权码 OIDC 客户端（confidential 或 public）；secret 只在创建/轮换时可得 |
