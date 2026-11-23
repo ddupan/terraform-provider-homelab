@@ -4,7 +4,7 @@ go 1.27.2
 
 require (
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
-	github.com/spiffe/go-spiffe/v2 v2.8.2
+	github.com/spiffe/go-spiffe/v2 v2.9.0
 )
 
 require (
