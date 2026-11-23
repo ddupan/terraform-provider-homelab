@@ -6,17 +6,18 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   test:
-    # Shared Kubernetes pod pool (gitea-dynamic-runner); action versions pinned as in Ayatori.
-    runs-on: [self-hosted, pod]
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: https://git.ddupan.top/panxiao81/ci-actions/setup-artifact-keeper@d4d8f283dfadac168abc9c7b30036b34d9125fdb # v1
+      - uses: actions/setup-go@v7
         with:
-          go: 'true'
           go-version-file: go.mod
       - name: Module is tidy
         run: |

@@ -14,7 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"git.ddupan.top/panxiao81/terraform-provider-homelab/internal/iamlogin"
+	"github.com/ddupan/terraform-provider-homelab/internal/iamlogin"
 )
 
 func newOIDCClientResource() resource.Resource { return &oidcClientResource{} }
