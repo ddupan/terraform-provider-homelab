@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# First half of a release (release.yml `build`, on a GitHub-hosted runner): build one zip per platform,
+# the binary named as Terraform expects, plus SHA256SUMS, into <dir>. scripts/release uploads them.
+set -euo pipefail
+
+version=${1:?usage: scripts/build-release <version> <dir>}
+dist=${2:?usage: scripts/build-release <version> <dir>}
+type=homelab
+platforms=(linux/amd64 linux/arm64)
+
+mkdir -p "$dist"
+work=$(mktemp -d)
+trap 'rm -rf -- "$work"' EXIT
+for platform in "${platforms[@]}"; do
+  os=${platform%/*} arch=${platform#*/}
+  binary=terraform-provider-${type}_v${version}
+  CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=$version" -o "$work/$binary" .
+  (cd "$work" && zip -q -X "$(realpath "$dist")/terraform-provider-${type}_${version}_${os}_${arch}.zip" "$binary" && rm "$binary")
+done
+(cd "$dist" && sha256sum -- *.zip > "terraform-provider-${type}_${version}_SHA256SUMS")

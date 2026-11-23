@@ -1,4 +1,4 @@
-module git.ddupan.top/panxiao81/terraform-provider-homelab
+module github.com/ddupan/terraform-provider-homelab
 
 go 1.27.2
 

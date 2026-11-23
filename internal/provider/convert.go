@@ -6,7 +6,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 
-	"git.ddupan.top/panxiao81/terraform-provider-homelab/internal/iamlogin"
+	"github.com/ddupan/terraform-provider-homelab/internal/iamlogin"
 )
 
 func (r *oidcClientResource) toAPI(ctx context.Context, m oidcClientModel, diags *diag.Diagnostics) iamlogin.OIDCClient {

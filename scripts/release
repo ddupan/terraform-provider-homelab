@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
-# CI half of a release (job `release`, on a v* tag): build the zips and SHA256SUMS and upload them to
-# the registry bucket. Nothing is published yet: terraform only finds a version through the versions
-# index and the per-platform download documents, which scripts/publish writes on the maintainer's
-# machine after verifying and signing SHA256SUMS with the maintainer's own key (YubiKey). Upload
-# credentials come from OpenBao through the job's SPIFFE identity
-# (spiffe://ddupan.top/ci/panxiao81/terraform-provider-homelab/release), never via argv or the log.
+# Second half of a release (release.yml `release`, on the homelab ARC runner, which reaches the LAN-only
+# registry and bucket): upload what scripts/build-release built to the registry bucket. Nothing is
+# published yet: terraform only finds a version through the versions index and the per-platform
+# download documents, which scripts/publish writes on the maintainer's machine after verifying and
+# signing SHA256SUMS with the maintainer's own key (YubiKey). The workflow logs in to OpenBao as
+# spiffe://ddupan.top/ci/github/ddupan/terraform-provider-homelab/release (BAO_ADDR/BAO_TOKEN in env,
+# revoked by the login action's post step); the S3 keys never reach argv or the log.
 set -euo pipefail
 
-version=${1:?usage: scripts/release <version>}
+version=${1:?usage: scripts/release <version> <dir>}
+dist=${2:?usage: scripts/release <version> <dir>}
+: "${BAO_ADDR:?}" "${BAO_TOKEN:?}"
 namespace=ddupan type=homelab
 registry=https://terraform.lab.ddupan.top
-# The pod pool spans two clusters (homelab and sandbox): only LAN names resolve in both, not the
-# homelab cluster's Service names (a sandbox-placed v0.1.1 run failed on exactly that).
 s3=${S3_ENDPOINT:-https://s3.lab.ddupan.top}/terraform-registry
-bao=${BAO_ADDR:-https://bao.ad.ddupan.top:8200}
-socket=${SPIFFE_SOCKET:-/run/spire/agent-sockets/spire-agent.sock}
-platforms=(linux/amd64 linux/arm64)
 
 # A published version is immutable: its SHA256SUMS carries the maintainer's signature, and a rebuilt
 # zip (new timestamps, new hash) would make it uninstallable.
@@ -29,32 +27,9 @@ esac
 
 umask 077
 work=$(mktemp -d)
-token=
-cleanup() {
-  [[ -n $token ]] && curl -fsS -o /dev/null -X POST -H @"$work/bao-header" "$bao/v1/auth/token/revoke-self" || true
-  rm -rf -- "$work"
-}
-trap cleanup EXIT
-
-# Build: one zip per platform, the binary named as Terraform expects.
-dist=$work/dist
-mkdir -p "$dist"
-for platform in "${platforms[@]}"; do
-  os=${platform%/*} arch=${platform#*/}
-  binary=terraform-provider-${type}_v${version}
-  CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=$version" -o "$work/$binary" .
-  (cd "$work" && zip -q -X "$dist/terraform-provider-${type}_${version}_${os}_${arch}.zip" "$binary" && rm "$binary")
-done
-sums=terraform-provider-${type}_${version}_SHA256SUMS
-(cd "$dist" && sha256sum -- *.zip > "$sums")
-
-# OpenBao login with the job's JWT-SVID; the token stays in a header file.
-spire-agent api fetch jwt -audience openbao -socketPath "$socket" -output json > "$work/svid.json"
-jq -er '[.. | objects | .svid? // empty] | if length == 1 then .[0] else error("expected one JWT-SVID") end' "$work/svid.json" > "$work/jwt"
-token=$(jq -n --arg role ci-terraform-registry-publisher --rawfile jwt "$work/jwt" '{role: $role, jwt: ($jwt | rtrimstr("\n"))}' \
-  | curl -fsS -X POST --data @- "$bao/v1/auth/jwt-spire/login" | jq -er .auth.client_token)
-printf 'X-Vault-Token: %s\n' "$token" > "$work/bao-header"
-curl -fsS -H @"$work/bao-header" "$bao/v1/kv/data/k8s/terraform-registry-s3-publisher" > "$work/s3.json"
+trap 'rm -rf -- "$work"' EXIT
+printf 'X-Vault-Token: %s\n' "$BAO_TOKEN" > "$work/bao-header"
+curl -fsS -H @"$work/bao-header" "$BAO_ADDR/v1/kv/data/k8s/terraform-registry-s3-publisher" > "$work/s3.json"
 printf 'user = "%s:%s"\n' "$(jq -er .data.data.access_key "$work/s3.json")" "$(jq -er .data.data.secret_key "$work/s3.json")" > "$work/s3.curlrc"
 
 put() { # put <local file> <key> <content type>

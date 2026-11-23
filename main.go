@@ -7,7 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
-	"git.ddupan.top/panxiao81/terraform-provider-homelab/internal/provider"
+	"github.com/ddupan/terraform-provider-homelab/internal/provider"
 )
 
 // version is set by the release build (-ldflags "-X main.version=...").

@@ -14,7 +14,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/svid/jwtsvid"
 	"github.com/spiffe/go-spiffe/v2/workloadapi"
 
-	"git.ddupan.top/panxiao81/terraform-provider-homelab/internal/iamlogin"
+	"github.com/ddupan/terraform-provider-homelab/internal/iamlogin"
 )
 
 // iamLoginAudience is the audience iam-login requires of JWT-SVIDs.

@@ -87,8 +87,10 @@ go build -o terraform-provider-homelab
 
 发布分两半，签名只在维护者本机完成：
 
-1. 打 `vX.Y.Z` tag：`release` job 测试后执行 `scripts/release`，构建 linux/amd64、linux/arm64 的 zip 与
-   `SHA256SUMS`，上传到静态 registry 的 bucket（homelab-infra `apps/seaweedfs` 的 `terraform-registry`）。
+1. 打 `vX.Y.Z` tag：release.yml 的 `build` job（GitHub 托管 runner）测试后执行 `scripts/build-release`，构建
+   linux/amd64、linux/arm64 的 zip 与 `SHA256SUMS`；`release` job（homelab ARC runner，`runs-on: homelab`）
+   以 `spiffe://ddupan.top/ci/github/ddupan/terraform-provider-homelab/release` 登录 OpenBao，执行
+   `scripts/release` 上传到静态 registry 的 bucket（homelab-infra `apps/seaweedfs` 的 `terraform-registry`）。
    此时 terraform 还找不到这个版本。已发布的版本拒绝再次上传（重建的 zip 哈希不同，会让已签名的版本失效）。
 2. 本机执行 `scripts/publish X.Y.Z`：下载 zip 与 `SHA256SUMS` 并逐一校验，用维护者 YubiKey 上的签名子钥
    `8A887573EFE9762D`（主钥 `0166F47B5400ECC2`）签名（按提示触摸），再写签名、各平台 download 文档，最后更新
