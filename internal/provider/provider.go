@@ -75,7 +75,7 @@ func (p *homelab) Configure(ctx context.Context, req provider.ConfigureRequest, 
 	}
 	var configured clients
 	if config.IAMLogin != nil {
-		client, err := iamlogin.New(config.IAMLogin.Endpoint.ValueString(), svidSource(socket, iamLoginAudience), nil)
+		client, err := iamlogin.New(config.IAMLogin.Endpoint.ValueString(), svidSource(socket, iamLoginAudience, iamLoginSVIDEnv), nil)
 		if err != nil {
 			resp.Diagnostics.AddError("Invalid iam_login configuration", err.Error())
 			return
@@ -86,8 +86,17 @@ func (p *homelab) Configure(ctx context.Context, req provider.ConfigureRequest, 
 	resp.DataSourceData = configured
 }
 
+// iamLoginSVIDEnv, when set, is the JWT-SVID (audience iam-login) to use instead of the Workload API: CI
+// jobs that hold no Workload API socket (GitHub Actions via spire-identity-exchange) obtain one per run.
+// It wins over spiffe_endpoint_socket, which configurations set for local runs. The caller keeps the run
+// within the SVID's lifetime.
+const iamLoginSVIDEnv = "HOMELAB_JWT_SVID_IAM_LOGIN"
+
 // svidSource fetches a fresh JWT-SVID per call; SVIDs are short-lived and applies can be long.
-func svidSource(socket, audience string) iamlogin.TokenSource {
+func svidSource(socket, audience, env string) iamlogin.TokenSource {
+	if token := os.Getenv(env); token != "" {
+		return func(context.Context) (string, error) { return token, nil }
+	}
 	return func(ctx context.Context) (string, error) {
 		var options []workloadapi.ClientOption
 		if socket != "" {
