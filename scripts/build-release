@@ -9,12 +9,14 @@ type=homelab
 platforms=(linux/amd64 linux/arm64)
 
 mkdir -p "$dist"
+# Absolute: the zip step runs after cd "$work", where a relative dist (release.yml passes `dist`) resolves wrong.
+dist=$(realpath "$dist")
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 for platform in "${platforms[@]}"; do
   os=${platform%/*} arch=${platform#*/}
   binary=terraform-provider-${type}_v${version}
   CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=$version" -o "$work/$binary" .
-  (cd "$work" && zip -q -X "$(realpath "$dist")/terraform-provider-${type}_${version}_${os}_${arch}.zip" "$binary" && rm "$binary")
+  (cd "$work" && zip -q -X "$dist/terraform-provider-${type}_${version}_${os}_${arch}.zip" "$binary" && rm "$binary")
 done
 (cd "$dist" && sha256sum -- *.zip > "terraform-provider-${type}_${version}_SHA256SUMS")
